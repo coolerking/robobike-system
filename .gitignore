@@ -218,3 +218,15 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# ROS 2 workspace and recorded / learned data
+install/
+log/
+*.db3
+*.db3-*
+*.mcap
+*.pt
+*.pth
+*.safetensors
+/ml/data/
+/bags/

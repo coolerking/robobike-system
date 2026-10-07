@@ -1,0 +1,14 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>robobike_logger</name>
+  <version>0.0.1</version>
+  <description>Rosbag recording launch files for imitation learning.</description>
+  <maintainer email="maintainers@example.com">Robobike maintainers</maintainer>
+  <license>MIT</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <exec_depend>ros2bag</exec_depend>
+  <exec_depend>rosbag2_storage_default_plugins</exec_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>
