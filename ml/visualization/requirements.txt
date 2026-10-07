@@ -1,0 +1,2 @@
+streamlit==1.56.0
+rerun-sdk==0.26.2

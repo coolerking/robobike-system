@@ -1,0 +1,20 @@
+services:
+  pc_ml:
+    build:
+      context: ../..
+      dockerfile: docker/pc_ml/Dockerfile
+    platform: linux/amd64
+    init: true
+    shm_size: "2gb"
+    ports:
+      - "127.0.0.1:8501:8501"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - ../../ml:/workspace/ml
+      - ../../bags:/data/bags:ro

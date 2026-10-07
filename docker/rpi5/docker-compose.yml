@@ -1,0 +1,28 @@
+services:
+  rpi5:
+    build:
+      context: ../..
+      dockerfile: docker/rpi5/Dockerfile
+      args:
+        # osrf desktop images are amd64-only; install desktop-full on the ARM64 ROS base.
+        ROS_IMAGE: ros:humble-ros-base
+    platform: linux/arm64
+    network_mode: "host"
+    init: true
+    environment:
+      ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-42}
+      ROS_LOCALHOST_ONLY: "0"
+      RMW_IMPLEMENTATION: rmw_fastrtps_cpp
+    devices:
+      - "${CAMERA_DEVICE:-/dev/video0}:/dev/video0"
+    volumes:
+      - ../../src:/ros2_ws/src:ro
+      - ros_build:/ros2_ws/build
+      - ros_install:/ros2_ws/install
+      - ros_log:/ros2_ws/log
+      - ../../bags:/data/bags
+
+volumes:
+  ros_build:
+  ros_install:
+  ros_log:
