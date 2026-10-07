@@ -62,7 +62,7 @@ Joy ── robobike_teleop ── /teleop/cmd_vel             /policy/cmd_vel
 
 | コンポーネント | 入力 | 出力・役割 |
 | --- | --- | --- |
-| `pi5_camera` | USBカメラ（既定`/dev/video0`） | `/camera/image_raw` (`sensor_msgs/Image`, `bgr8`, sensor-data QoS)、ROS時刻とframe ID付き |
+| `pi5_camera` | USBカメラ（既定`/dev/v4l/by-id`を走査、無ければ`/dev/video0`） | `/camera/image_raw` (`sensor_msgs/Image`, `bgr8`, sensor-data QoS)、ROS時刻とframe ID付き |
 | `robobike_bridge` | `/cmd_vel` (`geometry_msgs/Twist`) | 実機プロトコル実装用の空枠。現時点では何も送信しない |
 | `robobike_teleop` | `/joy` (`sensor_msgs/Joy`) | `/teleop/cmd_vel` (`Twist`) |
 | `robobike_policy` | `/policy/enable` (`std_msgs/Bool`)、`/camera/image_raw` | enableがTrueかつ画像が新しい場合だけ`infer()`を呼び、結果があれば`/policy/cmd_vel` (`Twist`)へ出力 |
@@ -97,7 +97,7 @@ PC側の受信時刻だけで完全には検出できません。実機通信を
 
 | ノード | パラメータ（既定値） |
 | --- | --- |
-| camera | `device=/dev/video0`, `fps=15.0`, `frame_id=camera` |
+| camera | `device=/dev/v4l/by-id`, `camera_id=""`, `fps=15.0`（Hz）, `frame_id=camera`, `topic=/camera/image_raw`, `reopen_after_failures=30` |
 | teleop | `linear_axis=1`, `angular_axis=0`, `deadman_button=0`, `linear_scale=0.5`, `angular_scale=1.0`, `joy_timeout=0.5` |
 | policy | `image_timeout=0.5` |
 | control | `command_timeout=0.5`, `linear_limit=0.5`, `angular_limit=1.0`, `human_deadband=0.05` |
@@ -257,10 +257,14 @@ Muxの回帰テストはPython標準の`unittest`のみで実行でき、ROSは�
 ```bash
 PYTHONPATH="$ROBOBIKE_ROOT/src/pc/robobike_control" \
   python3 -m unittest discover -s "$ROBOBIKE_ROOT/src/pc/robobike_control/test" -v
+python3 -m pytest "$ROBOBIKE_ROOT/src/rpi5/pi5_camera/test" -v
 docker compose -f "$ROBOBIKE_ROOT/docker/rpi5/docker-compose.yml" config --quiet
 docker compose -f "$ROBOBIKE_ROOT/docker/pc_ros/docker-compose.yml" config --quiet
 docker compose -f "$ROBOBIKE_ROOT/docker/pc_ml/docker-compose.yml" config --quiet
 ```
+
+カメラノードのテストはrclpy/cv2/cv_bridgeが無い環境ではstubを注入して実行されます。
+Piコンテナ内では`colcon test --packages-select pi5_camera && colcon test-result --verbose`で実ROSを使って実行できます。
 
 ROSコンテナ内では上記ビルド後に`ros2 pkg executables`、
 `ros2 launch robobike_logger record.launch.py --show-args`でインストールを確認できます。

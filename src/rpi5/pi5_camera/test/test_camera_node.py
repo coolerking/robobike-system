@@ -196,14 +196,19 @@ class CameraNodeTest(ByIdDirMixin, unittest.TestCase):
         self.capture.read.return_value = (True, "frame")
         self.logger = MagicMock(name="logger")
         self.clock = MagicMock(name="clock")
+        self.clock.now.return_value.to_msg.return_value = type(camera_node.Image().header.stamp)()
         self.patches = {
             "VideoCapture": patch.object(camera_node.cv2, "VideoCapture", return_value=self.capture),
             "create_timer": patch.object(camera_node.CameraNode, "create_timer"),
-            "create_publisher": patch.object(camera_node.CameraNode, "create_publisher"),
+            "create_publisher": patch.object(
+                camera_node.CameraNode, "create_publisher", side_effect=lambda *a, **k: MagicMock(name="publisher")
+            ),
             "get_logger": patch.object(camera_node.CameraNode, "get_logger", return_value=self.logger),
+            "CvBridge": patch.object(camera_node, "CvBridge"),
             "get_clock": patch.object(camera_node.CameraNode, "get_clock", return_value=self.clock),
         }
         self.mocks = {name: p.start() for name, p in self.patches.items()}
+        self.mocks["CvBridge"].return_value.cv2_to_imgmsg.side_effect = lambda *a, **k: camera_node.Image()
         for p in self.patches.values():
             self.addCleanup(p.stop)
         self.video0 = self.make_device("video0")
@@ -214,6 +219,10 @@ class CameraNodeTest(ByIdDirMixin, unittest.TestCase):
         node = camera_node.CameraNode(parameter_overrides=overrides)
         self.addCleanup(node.destroy_node)
         return node
+
+    def image_topics(self):
+        # A real rclpy Node also creates internal publishers (e.g. parameter events).
+        return [c.args[1] for c in self.mocks["create_publisher"].call_args_list if c.args[0] is camera_node.Image]
 
     def test_invalid_fps_is_rejected(self):
         for fps in (0.0, -1.0, -15.0, float("nan"), float("inf")):
@@ -239,11 +248,11 @@ class CameraNodeTest(ByIdDirMixin, unittest.TestCase):
         self.make_node()
         period, _ = self.mocks["create_timer"].call_args.args
         self.assertTrue(math.isclose(period, 1.0 / 15.0))
-        self.assertEqual(self.mocks["create_publisher"].call_args.args[1], "/camera/image_raw")
+        self.assertEqual(self.image_topics(), ["/camera/image_raw"])
 
     def test_topic_parameter_is_used(self):
         self.make_node(topic="/front/image_raw")
-        self.assertEqual(self.mocks["create_publisher"].call_args.args[1], "/front/image_raw")
+        self.assertEqual(self.image_topics(), ["/front/image_raw"])
 
     def test_by_id_device_is_opened_by_real_path(self):
         video2 = self.make_device("video2")
@@ -270,7 +279,7 @@ class CameraNodeTest(ByIdDirMixin, unittest.TestCase):
         node = self.make_node()
         self.capture.read.return_value = (False, None)
         node.publish_frame()
-        self.mocks["create_publisher"].return_value.publish.assert_not_called()
+        node.publisher.publish.assert_not_called()
         self.logger.warning.assert_called()
 
     def test_successful_read_publishes_with_header(self):
@@ -282,8 +291,7 @@ class CameraNodeTest(ByIdDirMixin, unittest.TestCase):
         self.clock.now.return_value.to_msg.return_value = stamp
         node.publish_frame()
         node.bridge.cv2_to_imgmsg.assert_called_once_with("frame", encoding="bgr8")
-        publisher = self.mocks["create_publisher"].return_value
-        publisher.publish.assert_called_once_with(message)
+        node.publisher.publish.assert_called_once_with(message)
         self.assertEqual(message.header.frame_id, "front_camera")
         self.assertEqual(message.header.stamp, stamp)
 
@@ -294,7 +302,7 @@ class CameraNodeTest(ByIdDirMixin, unittest.TestCase):
         self.logger.warning.assert_called()
         self.mocks["create_timer"].assert_called_once()
         node.publish_frame()
-        self.mocks["create_publisher"].return_value.publish.assert_not_called()
+        node.publisher.publish.assert_not_called()
 
     def test_repeated_open_failure_retries_open(self):
         self.capture.isOpened.return_value = False
