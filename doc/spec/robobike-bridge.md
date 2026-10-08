@@ -317,7 +317,7 @@ wlan0 を既定の設定のまま接続すると、デフォルトルートや D
 - wlan0 の接続（NetworkManager の場合）には次の設定をする:
   `nmcli connection modify <ROBOBIKE-xxxx> ipv4.never-default yes ipv4.ignore-auto-dns yes ipv6.method disabled connection.autoconnect no`
   これで `192.168.4.0/24` だけが wlan0 経由になり、デフォルトルートと DNS は eth0 のまま保たれる。
-- ROS 2 の DDS（Fast DDS）は既定で全インターフェースを使う。2 台しか接続できない ROBOBIKE の AP に DDS の multicast を流さないよう、Fast DDS のプロファイル XML（`interfaceWhiteList` に eth0 の IP を指定）で DDS を eth0 だけに限定することを推奨する。`docker/rpi5` の環境変数 `FASTRTPS_DEFAULT_PROFILES_FILE` で指定する（設定ファイルの追加は実装時に行う）。
+- ROS 2 の DDS（Fast DDS）は既定で全インターフェースを使う。2 台しか接続できない ROBOBIKE の AP に DDS の multicast を流さないよう、Fast DDS のプロファイル XML（`interfaceWhiteList` に eth0 の IP を指定）で DDS を eth0 だけに限定することを推奨する。プロファイルは `docker/rpi5/fastdds_eth0_only.xml`（`ETH0_IPV4_ADDRESS` を eth0 の IP に書き換えて使う）で、Compose がコンテナの `/etc/robobike/fastdds_eth0_only.xml` にマウントするので、コンテナの各シェルで `export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/robobike/fastdds_eth0_only.xml` としてからノードを起動する（空の値を設定すると Fast DDS がエラーを出すため、Compose では既定値を設定していない）。
 - コンテナは `network_mode: host` なので、Docker 側の追加設定は不要。
 - 時刻: テレメトリの `header.stamp` は Pi の時計に換算した値で、[pi5_camera.md](pi5_camera.md) の画像と同じ時間軸になる。PC 側の時刻と比べる場合は、Pi と PC の時計を NTP（chrony など、eth0 経由）で同期する。
 
@@ -337,8 +337,7 @@ ros2 topic echo /robobike/drive_state
 ros2 topic echo /robobike/bridge/connected
 ```
 
-`robobike_logger` の `record.launch.py` の記録対象に、`/robobike/telemetry`、`/robobike/drive_state`、`/robobike/bridge/connected` を追加する（実装時に一緒に変更する）。
-README のノード構成図の「`robobike_bridge` ── [未実装: 実機]」も、この仕様に合わせて更新する。
+`robobike_logger` の `record.launch.py` は、`/robobike/telemetry`、`/robobike/drive_state`、`/robobike/bridge/connected` も記録する。PC 側でも `robobike_msgs` をビルドしておくこと（記録にメッセージ型が必要）。
 
 ## 9. テスト方針（テスト先行）
 

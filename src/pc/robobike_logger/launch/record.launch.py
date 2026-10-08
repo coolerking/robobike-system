@@ -14,6 +14,7 @@ def generate_launch_description():
                 "--output", LaunchConfiguration("output"),
                 "/camera/image_raw", "/joy", "/teleop/cmd_vel",
                 "/policy/cmd_vel", "/policy/enable", "/cmd_vel", "/control/state",
+                "/robobike/telemetry", "/robobike/drive_state", "/robobike/bridge/connected",
             ],
             output="screen",
         ),

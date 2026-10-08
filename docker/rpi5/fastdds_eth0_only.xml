@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!--
+  Restrict ROS 2 (Fast DDS) traffic to eth0 so that DDS multicast never reaches the ROBOBIKE AP on wlan0.
+  Replace ETH0_IPV4_ADDRESS with the Pi's eth0 address (ip -4 addr show eth0), then start the container with
+  FASTDDS_PROFILE=/etc/robobike/fastdds_eth0_only.xml (see README).
+  Shared-memory transport is disabled as well, so local nodes also talk over eth0's UDP.
+-->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>robobike_eth0_udp</transport_id>
+      <type>UDPv4</type>
+      <interfaceWhiteList>
+        <address>ETH0_IPV4_ADDRESS</address>
+      </interfaceWhiteList>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="robobike_eth0_only" is_default_profile="true">
+    <rtps>
+      <userTransports>
+        <transport_id>robobike_eth0_udp</transport_id>
+      </userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+    </rtps>
+  </participant>
+</profiles>
