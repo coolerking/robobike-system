@@ -16,6 +16,8 @@ ML環境はROS非依存のPyTorchコンテナに分離します。
 robobike-system/
 ├── .gitignore
 ├── README.md
+├── doc/
+│   └── spec/                  # パッケージ仕様書（pi5_camera.md、robobike-bridge.md）
 ├── docker/
 │   ├── rpi5/                  # ARM64 ROS環境
 │   ├── pc_ros/                # x86_64 ROS + NVIDIA環境
