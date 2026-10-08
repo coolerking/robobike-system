@@ -11,10 +11,11 @@ setup(
         ("share/" + package_name, ["package.xml"]),
     ],
     install_requires=["setuptools"],
+    tests_require=["pytest"],
     zip_safe=True,
     maintainer="Robobike maintainers",
     maintainer_email="maintainers@example.com",
-    description="Robobike hardware transport extension point.",
+    description="Bridge between the ROBOBIKE HTTP API and ROS 2.",
     license="MIT",
     entry_points={"console_scripts": ["bridge_node = robobike_bridge.bridge_node:main"]},
 )

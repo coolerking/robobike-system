@@ -87,6 +87,8 @@ class ParameterTest(BridgeTestCase):
 class TelemetryTest(BridgeTestCase):
     def test_publishes_every_sample_in_order(self):
         node = self.make_node(frame_id="bike")
+        self.robot.queue_rows("a,1,0,0,0,0,0,0")  # stale sample discarded by /clear_buffer
+        self.assertEqual(node.poll_telemetry_once(), 0)
         self.robot.queue_rows(LINE13.format(t=1000, drv=0), "junk", LINE13.format(t=1004, drv=0))
         self.assertEqual(node.poll_telemetry_once(), 2)
         msgs = published(node.telemetry_publisher)
@@ -97,7 +99,7 @@ class TelemetryTest(BridgeTestCase):
         self.assertAlmostEqual(msgs[0].acc_y, 9.3, places=5)
         stamp_ns = [m.header.stamp.sec * 10**9 + m.header.stamp.nanosec for m in msgs]
         self.assertEqual(stamp_ns[1] - stamp_ns[0], 4_000_000)
-        self.assertEqual(self.robot.paths, ["/clear_buffer", "/get_acc"])
+        self.assertEqual(self.robot.paths, ["/clear_buffer", "/get_acc", "/get_acc"])
         self.assertEqual(node.malformed, 1)
         self.assertEqual(published(node.connected_publisher)[-1].data, True)
 
@@ -111,6 +113,7 @@ class TelemetryTest(BridgeTestCase):
 
     def test_gap_and_rewind_are_counted(self):
         node = self.make_node()
+        node.poll_telemetry_once()
         self.robot.queue_rows(*(LINE13.format(t=t, drv=0) for t in (1000, 1004, 1020)))
         node.poll_telemetry_once()
         self.assertEqual(node.gaps.missing, 3)
@@ -140,6 +143,7 @@ class TelemetryTest(BridgeTestCase):
 
     def test_stale_telemetry_reports_disconnected(self):
         node = self.make_node(stale_timeout=0.05)
+        node.poll_telemetry_once()
         self.robot.queue_rows(LINE13.format(t=1000, drv=0))
         node.poll_telemetry_once()
         self.assertTrue(node.connected())

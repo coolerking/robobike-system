@@ -142,6 +142,7 @@ class DriveControllerTest(unittest.TestCase):
         self.assertEqual(h.step(sv_drv=60.0, dt=1.1), [Command(BT_S)])
         self.assertEqual(h.step(sv_drv=60.0, dt=1.1), [Command(STP_ALL)])
         self.assertEqual(h.ctl.state, "FAULT")
+        self.assertEqual(h.ctl.suspected_drops, 3)
         self.assertEqual(h.step(sv_drv=0.0, dt=5.0), [])
 
     def test_external_stop_locks_out_until_rearmed(self):
@@ -162,12 +163,13 @@ class DriveControllerTest(unittest.TestCase):
         self.assertEqual(h.step(), [Command(BT_F)])
 
     def test_start_timeout_locks_out(self):
-        h = Harness(start_confirm_timeout=1.0)
+        h = Harness(start_confirm_timeout=1.0, cmd_timeout=2.0)
         h.cmd(0.2)
         h.step()
         h.cmd(0.2)
         h.step(dt=1.1)
         self.assertEqual(h.ctl.state, "LOCKOUT")
+        self.assertEqual(h.ctl.suspected_drops, 1)
 
     def test_stop_requested_while_starting_waits_for_motor(self):
         h = Harness()
