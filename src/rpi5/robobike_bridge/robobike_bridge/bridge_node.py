@@ -349,15 +349,20 @@ def main(args=None):
     except ImportError:
         rclpy.init(args=args)
 
-    def terminate(signum, frame):
-        raise KeyboardInterrupt
+    # Only set a flag in the handler: raising inside a running callback would abort it half-way.
+    stop_requested = threading.Event()
 
-    signal.signal(signal.SIGTERM, terminate)
+    def request_stop(signum, frame):
+        stop_requested.set()
+
+    signal.signal(signal.SIGINT, request_stop)
+    signal.signal(signal.SIGTERM, request_stop)
     node = None
     try:
         node = BridgeNode()
         node.start_workers()
-        rclpy.spin(node)
+        while not stop_requested.is_set() and rclpy.ok():
+            rclpy.spin_once(node, timeout_sec=0.1)
     except KeyboardInterrupt:
         pass
     finally:

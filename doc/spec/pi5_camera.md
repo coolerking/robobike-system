@@ -96,7 +96,7 @@ ros2 run pi5_camera camera_node --ros-args -p fps:=10.0     # パラメータ指
 ## 5. ネットワークと時刻
 
 - 画像は無圧縮の `bgr8` なので、DDS の帯域を大きく使う（例: 640×480 × 3 B × 15 Hz ≒ 13.8 MB/s）。PC へは有線 LAN（eth0）で送る前提である。
-- [robobike-bridge.md](robobike-bridge.md) §7 のとおり、Pi の wlan0 は ROBOBIKE の AP（2 台までしか接続できず、帯域も小さい）につながる。画像の DDS トラフィックが wlan0 に流れないよう、Fast DDS のプロファイルで DDS を eth0 に限定することを推奨する。プロファイルは `docker/rpi5` のコンテナ全体に効くので、`robobike_bridge` と共通の設定になる。
+- [robobike-bridge.md](robobike-bridge.md) §7 のとおり、Pi の wlan0 は ROBOBIKE の AP（2 台までしか接続できず、帯域も小さい）につながる。画像の DDS トラフィックが wlan0 に流れないよう、Fast DDS のプロファイル（`docker/rpi5/fastdds_eth0_only.xml`）で DDS を eth0 に限定することを推奨する。プロファイルは `docker/rpi5` のコンテナ全体に効くので、`robobike_bridge` と共通の設定になる。
 - `header.stamp` は Pi の時計による。`robobike_bridge` のテレメトリも Pi の時計に換算した値なので、Pi 上の 2 つのストリームは同じ時間軸で突き合わせられる。
   - PC 側で受信時刻（rosbag の記録時刻など）と比べる場合は、Pi と PC の時計を NTP（chrony など、eth0 経由）で同期しておく。
   - `robobike_policy` の鮮度判定は PC の単調時計による受信時刻なので、時計の同期には依存しない。

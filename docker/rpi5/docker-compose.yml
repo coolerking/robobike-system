@@ -21,6 +21,8 @@ services:
       - ros_install:/ros2_ws/install
       - ros_log:/ros2_ws/log
       - ../../bags:/data/bags
+      # Opt in per shell: export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/robobike/fastdds_eth0_only.xml
+      - ./fastdds_eth0_only.xml:/etc/robobike/fastdds_eth0_only.xml:ro
 
 volumes:
   ros_build:

@@ -5,10 +5,11 @@ Raspberry Pi 5と外部PCをROS 2 Humbleで接続し、Robobikeのテレオペ�
 固定カメラ等への拡張も想定しています。ROSノードはPython / `rclpy`、
 ML環境はROS非依存のPyTorchコンテナに分離します。
 
-> **初期スキャフォールディングです。**
-> USBカメラ、Joy変換、制御Mux、rosbag記録は実装済みですが、実機通信、
-> SmolVLA推論サービス、データセット変換、ファインチューニングは未実装です。
-> この状態ではモーターを駆動せず、policyノードも走行指令を生成しません。
+> **開発途中です。**
+> USBカメラ、Joy変換、制御Mux、rosbag記録、ROBOBIKE実機とのHTTPブリッジ
+> （テレメトリ取得と`/cmd_vel`による操縦）は実装済みですが、SmolVLA推論サービス、
+> データセット変換、ファインチューニングは未実装です。policyノードは走行指令を生成しません。
+> ブリッジは既定で読み取り専用で、`enable_drive:=true`を指定したときだけ車体を動かします。
 
 ## 構成
 
@@ -19,16 +20,16 @@ robobike-system/
 ├── doc/
 │   └── spec/                  # パッケージ仕様書（pi5_camera.md、robobike-bridge.md）
 ├── docker/
-│   ├── rpi5/                  # ARM64 ROS環境
+│   ├── rpi5/                  # ARM64 ROS環境（fastdds_eth0_only.xml: DDSをeth0に限定）
 │   ├── pc_ros/                # x86_64 ROS + NVIDIA環境
 │   └── pc_ml/                 # ROS非依存のPyTorch + NVIDIA環境
 ├── src/
 │   ├── common/
-│   │   └── robobike_msgs/      # ament_cmake、将来のカスタムmsg用
-│   │       └── msg/.gitkeep
+│   │   └── robobike_msgs/      # ament_cmake、カスタムmsg
+│   │       └── msg/RobobikeTelemetry.msg
 │   ├── rpi5/
 │   │   ├── pi5_camera/         # USBカメラ → sensor_msgs/Image
-│   │   └── robobike_bridge/    # Twist → 実機通信の拡張ポイント
+│   │   └── robobike_bridge/    # ROBOBIKE HTTP ⇄ ROS（テレメトリ、/cmd_vel → 操縦コマンド）
 │   └── pc/
 │       ├── robobike_teleop/    # Joy → Twist（デッドマン付き）
 │       ├── robobike_policy/    # 外部SmolVLA推論へのROSアダプタ
@@ -44,9 +45,10 @@ robobike-system/
 `requirements.txt`を配置しています。Python ROSパッケージは公式の
 `ros2 pkg create --build-type ament_python`構成に基づき、`package.xml`、
 `setup.py`、`setup.cfg`、ament resource marker、Pythonモジュールを持ちます。
-`robobike_msgs`は`CMakeLists.txt`を持つインターフェースパッケージです。
-現在は標準メッセージのみを使うため、msg定義はありません。追加時は
-`rosidl_generate_interfaces`をCMakeに記述してください。
+`robobike_msgs`は`CMakeLists.txt`を持つインターフェースパッケージで、
+ROBOBIKEのテレメトリ`RobobikeTelemetry.msg`を定義しています。msgを追加するときは
+`rosidl_generate_interfaces`に追記してください。`robobike_bridge`と`robobike_logger`が
+依存するため、PiとPCの両方で`robobike_msgs`をビルドします。
 
 ## ノードとトピック
 
@@ -57,7 +59,9 @@ Joy ── robobike_teleop ── /teleop/cmd_vel             /policy/cmd_vel
                               │                     │
                               └── robobike_control ─┘
                                         │
-                           /cmd_vel ── robobike_bridge ── [未実装: 実機]
+                           /cmd_vel ── robobike_bridge ──(HTTP, wlan0)── ROBOBIKE
+                                        │
+              /robobike/telemetry, /robobike/drive_state, /robobike/bridge/connected
                                         │
                                    rosbag record
 ```
@@ -65,7 +69,7 @@ Joy ── robobike_teleop ── /teleop/cmd_vel             /policy/cmd_vel
 | コンポーネント | 入力 | 出力・役割 |
 | --- | --- | --- |
 | `pi5_camera` | USBカメラ（既定`/dev/v4l/by-id`を走査、無ければ`/dev/video0`） | `/camera/image_raw` (`sensor_msgs/Image`, `bgr8`, sensor-data QoS)、ROS時刻とframe ID付き |
-| `robobike_bridge` | `/cmd_vel` (`geometry_msgs/Twist`) | 実機プロトコル実装用の空枠。現時点では何も送信しない |
+| `robobike_bridge` | ROBOBIKEの`GET /get_acc`、`/cmd_vel` (`geometry_msgs/Twist`、`enable_drive:=true`のときだけ購読) | `/robobike/telemetry` (`robobike_msgs/RobobikeTelemetry`、約250 Hz)、`/robobike/drive_state` (`String`)、`/robobike/bridge/connected` (`Bool`)、`/diagnostics`。`/cmd_vel`を発進・停止・舵の`GET /command`に変換する。仕様は[doc/spec/robobike-bridge.md](doc/spec/robobike-bridge.md) |
 | `robobike_teleop` | `/joy` (`sensor_msgs/Joy`) | `/teleop/cmd_vel` (`Twist`) |
 | `robobike_policy` | `/policy/enable` (`std_msgs/Bool`)、`/camera/image_raw` | enableがTrueかつ画像が新しい場合だけ`infer()`を呼び、結果があれば`/policy/cmd_vel` (`Twist`)へ出力 |
 | `robobike_control` | `/control/mode` (`std_msgs/String`)、2系統のTwist | `/cmd_vel`、`/policy/enable`、`/control/state` (`String`) |
@@ -100,6 +104,7 @@ PC側の受信時刻だけで完全には検出できません。実機通信を
 | ノード | パラメータ（既定値） |
 | --- | --- |
 | camera | `device=/dev/v4l/by-id`, `camera_id=""`, `fps=15.0`（Hz）, `frame_id=camera`, `topic=/camera/image_raw`, `reopen_after_failures=30` |
+| bridge | `base_url=http://192.168.4.1`, `poll_period=0.05`, `enable_drive=false`, `cmd_timeout=0.5`, `start_linear=0.05`, `stop_linear=0.02`, `max_angular=1.0`, `allow_reverse=false`, `speed_control=false`（全パラメータは仕様書§5.4） |
 | teleop | `linear_axis=1`, `angular_axis=0`, `deadman_button=0`, `linear_scale=0.5`, `angular_scale=1.0`, `joy_timeout=0.5` |
 | policy | `image_timeout=0.5` |
 | control | `command_timeout=0.5`, `linear_limit=0.5`, `angular_limit=1.0`, `human_deadband=0.05` |
@@ -149,8 +154,18 @@ colcon build --packages-select robobike_msgs pi5_camera robobike_bridge
 source /ros2_ws/install/setup.bash
 ros2 run pi5_camera camera_node
 # 別のコンテナシェルでも上記2つのsetup.bashをsourceしてから:
-ros2 run robobike_bridge bridge_node
+ros2 run robobike_bridge bridge_node                                  # テレメトリのみ
+ros2 run robobike_bridge bridge_node --ros-args -p enable_drive:=true # 操縦も行う
 ```
+
+ブリッジを使う前に、スマホを1台目としてROBOBIKEのAPに接続してニュートラル調整を済ませ、
+Piのwlan0を2台目として接続します（wlan0の設定は仕様書§3・§7）。
+`enable_drive:=true`で走行させる間は、スマホのSTOPボタンを最終的な停止手段として必ず手元に置きます。
+
+DDSをeth0に限定する場合（推奨）は、`docker/rpi5/fastdds_eth0_only.xml`の
+`ETH0_IPV4_ADDRESS`をPiのeth0のIPアドレスに書き換え、コンテナの各シェルで
+`export FASTRTPS_DEFAULT_PROFILES_FILE=/etc/robobike/fastdds_eth0_only.xml`としてからノードを起動します
+（Composeがこのファイルを`/etc/robobike/`にマウントします）。
 
 PCで:
 
@@ -216,7 +231,8 @@ ros2 launch robobike_logger record.launch.py output:=/data/bags/session_001
 ```
 
 `output`は毎回未使用のディレクトリを指定してください。ホストの`bags/`へ保存されます。
-画像、Joy、両入力指令、実際の`/cmd_vel`、モード、policy enableを記録します。
+画像、Joy、両入力指令、実際の`/cmd_vel`、モード、policy enable、ROBOBIKEのテレメトリ・
+ブリッジの状態を記録します。
 画像の容量増大に注意し、再生時は実機bridgeを接続しないでください。
 
 PCでMLコンテナを起動:
@@ -260,13 +276,15 @@ Muxの回帰テストはPython標準の`unittest`のみで実行でき、ROSは�
 PYTHONPATH="$ROBOBIKE_ROOT/src/pc/robobike_control" \
   python3 -m unittest discover -s "$ROBOBIKE_ROOT/src/pc/robobike_control/test" -v
 python3 -m pytest "$ROBOBIKE_ROOT/src/rpi5/pi5_camera/test" -v
+python3 -m pytest "$ROBOBIKE_ROOT/src/rpi5/robobike_bridge/test" -v
 docker compose -f "$ROBOBIKE_ROOT/docker/rpi5/docker-compose.yml" config --quiet
 docker compose -f "$ROBOBIKE_ROOT/docker/pc_ros/docker-compose.yml" config --quiet
 docker compose -f "$ROBOBIKE_ROOT/docker/pc_ml/docker-compose.yml" config --quiet
 ```
 
-カメラノードのテストはrclpy/cv2/cv_bridgeが無い環境ではstubを注入して実行されます。
-Piコンテナ内では`colcon test --packages-select pi5_camera && colcon test-result --verbose`で実ROSを使って実行できます。
+カメラノードとブリッジのテストは、rclpy・cv2・cv_bridge・メッセージパッケージが無い環境ではstubを注入して実行されます。
+ブリッジのテストはフェイクのROBOBIKE（`http.server`）に対して動きます。
+Piコンテナ内では`colcon test --packages-select pi5_camera robobike_bridge && colcon test-result --verbose`で実ROSを使って実行できます。
 
 ROSコンテナ内では上記ビルド後に`ros2 pkg executables`、
 `ros2 launch robobike_logger record.launch.py --show-args`でインストールを確認できます。
