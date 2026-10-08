@@ -319,6 +319,7 @@ wlan0 を既定の設定のまま接続すると、デフォルトルートや D
   これで `192.168.4.0/24` だけが wlan0 経由になり、デフォルトルートと DNS は eth0 のまま保たれる。
 - ROS 2 の DDS（Fast DDS）は既定で全インターフェースを使う。2 台しか接続できない ROBOBIKE の AP に DDS の multicast を流さないよう、Fast DDS のプロファイル XML（`interfaceWhiteList` に eth0 の IP を指定）で DDS を eth0 だけに限定することを推奨する。`docker/rpi5` の環境変数 `FASTRTPS_DEFAULT_PROFILES_FILE` で指定する（設定ファイルの追加は実装時に行う）。
 - コンテナは `network_mode: host` なので、Docker 側の追加設定は不要。
+- 時刻: テレメトリの `header.stamp` は Pi の時計に換算した値で、[pi5_camera.md](pi5_camera.md) の画像と同じ時間軸になる。PC 側の時刻と比べる場合は、Pi と PC の時計を NTP（chrony など、eth0 経由）で同期する。
 
 ## 8. 起動例
 
@@ -341,7 +342,7 @@ README のノード構成図の「`robobike_bridge` ── [未実装: 実機]�
 
 ## 9. テスト方針（テスト先行）
 
-`src/rpi5/robobike_bridge/test/` に pytest を作成し、失敗を確認してから実装する。rclpy / `robobike_msgs` が import できない環境では、pi5_camera と同様に stub を `sys.modules` に入れて動かす。
+`src/rpi5/robobike_bridge/test/` に pytest を作成し、失敗を確認してから実装する。rclpy / `robobike_msgs` が import できない環境では、[pi5_camera](pi5_camera.md) と同様に stub を `sys.modules` に入れて動かす。
 状態機械と変換処理は ROS に依存しないモジュール（例: `robobike_bridge/drive.py`、`robobike_bridge/telemetry.py`）に分け、`robobike_control/mux.py` と同じように単体でテストできるようにする。
 
 | テスト | 内容 |
